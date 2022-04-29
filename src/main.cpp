@@ -418,5 +418,5 @@ int main() {
 
 	glfw::imgui::uninitialize();
 
-	return 0;
+	return 1;
 }
