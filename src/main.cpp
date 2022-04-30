@@ -32,9 +32,11 @@ struct app {
 	gfx::buffer<Vertex> terrain;
 	std::vector<Vertex> vertices;
 	std::vector<unsigned int> indices;
+	std::vector<Vertex> modifyVertices;
+	std::vector<unsigned int> modifyIndices;
 
 	float scl = 100.0f;
-	int resolution = 50;
+	int resolution = 400;
 	int width = 100;
 	int height = 100;
 	float perlinFreq = 0.01f;
@@ -115,8 +117,10 @@ struct app {
 				const float p_i0_j1 = perlin2d((i + 0) * dw, (j + 1) * dh, perlinFreq);
 				const float p_i1_j1 = perlin2d((i + 1) * dw, (j + 1) * dh, perlinFreq);
 
+				glm::vec4 pos1(i * dx, p_i0_j0 * scl, j * dz, 1.0f);
 				glm::vec4 pos2((i + 1) * dx, p_i1_j0 * scl, j * dz, 1.0f);
 				glm::vec4 pos3(i * dx, p_i0_j1 * scl, (j + 1) * dz, 1.0f);
+				glm::vec4 pos4((i + 1) * dx, p_i1_j1 * scl, (j + 1) * dz, 1.0f);
 
 				// glm::vec4 cartoonColor1 = {(p_i0_j0 + p_i1_j0 + p_i0_j1) / 3, 0.5f, 0.0f, 1.0f};
 				// glm::vec4 cartoonColor2 = {(p_i1_j0 + p_i0_j1 + p_i1_j1) / 3, 0.5f, 0.0f, 1.0f};
@@ -124,17 +128,17 @@ struct app {
 				// glm::vec4 randomColor2 = gfx::randVec4();
 				// randomColor1.a = randomColor2.a = 1.0f;
 
-				vertices.push_back({glm::vec4{i * dx, p_i0_j0 * scl, j * dz, 1.0f}, heightmapColor(p_i0_j0 * scl, biomeType)});
-				vertices.push_back({pos2, heightmapColor(pos2.y, biomeType)});
-				vertices.push_back({pos3, heightmapColor(pos3.y, biomeType)});
+				vertices.push_back({pos1, heightmapColor(pos1, biomeType)});
+				vertices.push_back({pos2, heightmapColor(pos2, biomeType)});
+				vertices.push_back({pos3, heightmapColor(pos3, biomeType)});
 
 				/*vertices.push_back({glm::vec4{i * dx, p_i0_j0 * scl, j * dz, 1.0f}, randomColor1});
 				vertices.push_back({pos2, randomColor1});
 				vertices.push_back({pos3, randomColor1});*/
 
-				vertices.push_back({glm::vec4{(i + 1) * dx, p_i1_j1 * scl, (j + 1) * dz, 1.0f}, heightmapColor(p_i1_j1 * scl, biomeType)});
-				vertices.push_back({pos3, heightmapColor(pos3.y, biomeType)});
-				vertices.push_back({pos2, heightmapColor(pos2.y, biomeType)});
+				vertices.push_back({pos4, heightmapColor(pos4, biomeType)});
+				vertices.push_back({pos3, heightmapColor(pos3, biomeType)});
+				vertices.push_back({pos2, heightmapColor(pos2, biomeType)});
 
 				/*vertices.push_back({glm::vec4{(i + 1) * dx, p_i1_j1 * scl, (j + 1) * dz, 1.0f}, randomColor2});
 				vertices.push_back({pos3, randomColor2});
@@ -149,14 +153,21 @@ struct app {
 				indices.push_back(std::size(indices));
 			}
 		}
+
 		gfx::upload(terrain, gfx::vertex_buffer, vertices);
 		gfx::upload(terrain, gfx::index_buffer, indices);
 	}
 
-	glm::vec4 heightmapColor(float const height, const BIOME_TYPE biomeType = NORMAL) {
+	void applyVertexModifications(std::vector<Vertex> &vertices, std::vector<Vertex> *modifyVertices) {}
+
+	glm::vec4 heightmapColor(glm::vec4 const &vertex, const BIOME_TYPE biomeType = NORMAL) {
+		float colorParam = (perlin2d(vertex.x, vertex.z) * 50 + vertex.y / scl) / 51;
 		switch (biomeType) {
 		case NORMAL:
-			return glm::vec4(perlin2d(height, height), 0.4f, 0.0f, 1.0f);
+			if (colorParam < 0.55f)
+				return glm::vec4(1.0 * colorParam, 0.8f * (1 - colorParam), 0.0f, 1.0f);
+			else
+				return glm::vec4(1.0, 1.0f, 1.0f, 1.0f);
 			break;
 
 		case RANDOM:
@@ -164,7 +175,7 @@ struct app {
 			break;
 
 		default:
-			return glm::vec4(perlin2d(height, height), 0.5f, 0.0f, 1.0f);
+			return glm::vec4(perlin2d(vertex.x, vertex.z), 0.5f, 0.0f, 1.0f);
 			break;
 		}
 	}
@@ -195,9 +206,10 @@ struct app {
 				triangle.vertex2 = vertices[i + 2].pos;
 				if (rayIntersectsTriangle(origin, vector, triangle, intersectPoint)) {
 					std::cout << "Intersection Point [ x: " << intersectPoint[0] << " y: " << intersectPoint[1] << " z: " << intersectPoint[2] << " ]" << std::endl;
-					vertices[i].color = {1.0, 0.0, 0.0, 1.0};
-					vertices[i + 1].color = {1.0, 0.0, 0.0, 1.0};
-					vertices[i + 1].color = {1.0, 0.0, 0.0, 1.0};
+					vertices[i].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
+					vertices[i + 1].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
+					vertices[i + 2].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
+
 					gfx::upload(terrain, gfx::vertex_buffer, vertices);
 				}
 			}
@@ -277,8 +289,14 @@ struct app {
 		ImGui::SetWindowPos(windowPosition);
 		ImGui::SetWindowSize(windowSize);
 
-		if (ImGui::SliderFloat("Scale", &scl, 1.0f, 200.0f)) generateTerrain(width, height);
-		if (ImGui::SliderInt("Resolution", &resolution, 1.0f, 200.0f)) generateTerrain(width, height);
+		float newScl = scl;
+		if (ImGui::SliderFloat("Scale", &newScl, 1.0f, 200.0f)) {
+			for (auto &vert : vertices)
+				vert.pos.y = vert.pos.y / scl * newScl;
+			scl = newScl;
+			gfx::upload(terrain, gfx::vertex_buffer, vertices);
+		}
+		// if (ImGui::SliderInt("Resolution", &resolution, 1.0f, 200.0f)) generateTerrain(width, height); TODO
 		if (ImGui::SliderFloat("Noise Frequency", &perlinFreq, 0.001f, 0.1f)) generateTerrain(width, height);
 
 		const char *items[] = {"NORMAL", "RANDOM"};
