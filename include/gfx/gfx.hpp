@@ -41,6 +41,9 @@ namespace gfx {
 			int success;
 			glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
 			if (!success) {
+				char infoLog[512];
+				glGetShaderInfoLog(shader, 512, nullptr, infoLog);
+				std::cout << "ERROR::SHADER::COMPILATION_FAILED\n" << infoLog << std::endl;
 				throw std::runtime_error("ERROR::SHADER::COMPILATION_FAILED\n");
 			};
 
@@ -57,6 +60,9 @@ namespace gfx {
 			glGetProgramiv(this->ID, GL_LINK_STATUS, &success);
 
 			if (!success) {
+				char infoLog[512];
+				glGetProgramInfoLog(this->ID, 512, nullptr, infoLog);
+				std::cout << "ERROR::SHADER::COMPILATION_FAILED\n" << infoLog << std::endl;
 				throw std::runtime_error("ERROR::SHADER::PROGRAM::LINKING_FAILED");
 			}
 		}
@@ -84,6 +90,24 @@ namespace gfx {
 		uniform &operator=(const uniform &value) = default;
 
 		void operator=(glm::vec4 value) const noexcept { glUniform4fv(location_, 1, &value[0]); }
+	};
+
+	template <> struct uniform<glm::vec3> {
+
+		GLuint location_ = 0;
+
+		constexpr uniform() = default;
+		uniform(const shader &shader_, const char *name_) noexcept {
+			GLint res = glGetUniformLocation(static_cast<GLuint>(shader_), name_);
+			if (res < 0)
+				printf("uniform %s cannot be set\n", name_);
+			else
+				location_ = static_cast<GLuint>(res);
+		}
+
+		uniform &operator=(const uniform &value) = default;
+
+		void operator=(glm::vec3 value) const noexcept { glUniform3fv(location_, 1, &value[0]); }
 	};
 
 	template <> struct uniform<glm::mat4> {
