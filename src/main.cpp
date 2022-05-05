@@ -179,6 +179,16 @@ struct app {
 				glm::vec3 norm3 = perlin2d_normal((i + 0) * dw, (j + 1) * dh, scl, perlinFreq);
 				glm::vec3 norm4 = perlin2d_normal((i + 1) * dw, (j + 1) * dh, scl, perlinFreq);
 
+				glm::vec3 norm1 = perlin2d_normal((i + 0) * dw, (j + 0) * dh, scl, perlinFreq);
+				glm::vec3 norm2 = perlin2d_normal((i + 1) * dw, (j + 0) * dh, scl, perlinFreq);
+				glm::vec3 norm3 = perlin2d_normal((i + 0) * dw, (j + 1) * dh, scl, perlinFreq);
+				glm::vec3 norm4 = perlin2d_normal((i + 1) * dw, (j + 1) * dh, scl, perlinFreq);
+
+				glm::vec3 norm1 = perlin2d_normal((i + 0) * dw, (j + 0) * dh, scl, perlinFreq);
+				glm::vec3 norm2 = perlin2d_normal((i + 1) * dw, (j + 0) * dh, scl, perlinFreq);
+				glm::vec3 norm3 = perlin2d_normal((i + 0) * dw, (j + 1) * dh, scl, perlinFreq);
+				glm::vec3 norm4 = perlin2d_normal((i + 1) * dw, (j + 1) * dh, scl, perlinFreq);
+
 				// glm::vec4 cartoonColor1 = {(p_i0_j0 + p_i1_j0 + p_i0_j1) / 3, 0.5f, 0.0f, 1.0f};
 				// glm::vec4 cartoonColor2 = {(p_i1_j0 + p_i0_j1 + p_i1_j1) / 3, 0.5f, 0.0f, 1.0f};
 				// glm::vec4 randomColor1 = gfx::randVec4();
