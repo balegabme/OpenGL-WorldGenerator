@@ -8,6 +8,7 @@ struct app {
 	struct Vertex {
 		glm::vec4 pos;
 		glm::vec4 color;
+		glm::vec3 normal;
 	};
 
 	int windowWidth = 1000;
@@ -28,13 +29,15 @@ struct app {
 
 	gfx::shader basic_shader;
 	gfx::uniform<glm::mat4> pvm;
+	gfx::uniform<glm::mat4> nm;
+	gfx::uniform<glm::vec3> eyePos;
 
 	gfx::buffer<Vertex> terrain;
 	std::vector<Vertex> vertices;
 	std::vector<unsigned int> indices;
 
 	float scl = 100.0f;
-	int resolution = 50;
+	int resolution = 100;
 	int width = 100;
 	int height = 100;
 	float perlinFreq = 0.01f;
@@ -53,14 +56,22 @@ struct app {
 			
 			layout(location = 0) in vec4 pos;
 			layout(location = 1) in vec4 col;
+			layout(location = 2) in vec3 nor;
 
 			out vec4 color;
+			out vec3 worldPos;
+			out vec3 normal;
 
 			uniform mat4 pvm;
+			uniform mat4 nm;
+			uniform vec3 eyePos;
 
 			void main() {
 				color = col;
-				gl_Position = pvm * pos;
+				vec4 position = pvm * pos;
+				gl_Position = position;
+				worldPos = position.xyz / position.w;
+				normal = normalize((nm * vec4(nor, 1.0f)).xyz);
 			}
 
 		)");
@@ -70,22 +81,58 @@ struct app {
 			basic_shader.attach(GL_FRAGMENT_SHADER, R"(
 			#version 330
 			
+			const vec3 lightDirection = vec3(1.0f, 1.0f, 1.0f);
+			const vec3 lightIntensity = vec3(1.0f, 1.0f, 1.0f);
+
+			const vec3 ambientColor = vec3(0.0f, 0.0f, 0.0f);
+
+			const vec3 specColor = vec3(1.0f, 1.0f, 1.0f);
+			const float shininess = 16.0f;
+
+			uniform mat4 pvm;
+			uniform mat4 nm;
+			uniform vec3 eyePos;
+
 			in vec4 color;
+			in vec3 worldPos;
+			in vec3 normal;
+
 			out vec4 fragColor;
 
 			void main() {
-				fragColor = color;
+				vec3 lig = normalize(lightDirection);
+				vec3 nor = normalize(normal);
+				vec3 viewDir = normalize(eyePos - worldPos);
+				float lambertian = max(dot(lig, nor), 0.0f);
+
+				vec3 sumColor = vec3(0.0f, 0.0f, 0.0f);
+
+				if (lambertian > 0.0f) {
+
+					vec3 halfDir = normalize(viewDir + lig);
+					float cosa = max(dot(halfDir, nor), 0.0f);
+					float specular = pow(cosa, shininess);
+
+					sumColor += lightIntensity * (color.rgb * lambertian + specColor * specular);
+
+				} 
+				sumColor += ambientColor;
+				fragColor = vec4(sumColor, 1.0f);
+
 			}
 		)");
 		}
 		basic_shader.link("fragColor");
 
 		pvm = gfx::uniform<glm::mat4>(basic_shader, "pvm");
+		nm = gfx::uniform<glm::mat4>(basic_shader, "nm");
+		eyePos = gfx::uniform<glm::vec3>(basic_shader, "eyePos");
 		//  pvm = camera.view();
 
 		gfx::layout<Vertex> basic_layout = {
 			{0, &Vertex::pos},
 			{1, &Vertex::color},
+			{2, &Vertex::normal},
 		};
 
 		camera = gfx::camera(glm::vec4(1.0f, 70.0f, 3.0f, 1.0f));
@@ -117,6 +164,16 @@ struct app {
 
 				glm::vec4 pos2((i + 1) * dx, p_i1_j0 * scl, j * dz, 1.0f);
 				glm::vec4 pos3(i * dx, p_i0_j1 * scl, (j + 1) * dz, 1.0f);
+
+				glm::vec3 norm1 = perlin2d_normal((i + 0) * dw, (j + 0) * dh, scl, perlinFreq);
+				glm::vec3 norm2 = perlin2d_normal((i + 1) * dw, (j + 0) * dh, scl, perlinFreq);
+				glm::vec3 norm3 = perlin2d_normal((i + 0) * dw, (j + 1) * dh, scl, perlinFreq);
+				glm::vec3 norm4 = perlin2d_normal((i + 1) * dw, (j + 1) * dh, scl, perlinFreq);
+
+				glm::vec3 norm1 = perlin2d_normal((i + 0) * dw, (j + 0) * dh, scl, perlinFreq);
+				glm::vec3 norm2 = perlin2d_normal((i + 1) * dw, (j + 0) * dh, scl, perlinFreq);
+				glm::vec3 norm3 = perlin2d_normal((i + 0) * dw, (j + 1) * dh, scl, perlinFreq);
+				glm::vec3 norm4 = perlin2d_normal((i + 1) * dw, (j + 1) * dh, scl, perlinFreq);
 
 				// glm::vec4 cartoonColor1 = {(p_i0_j0 + p_i1_j0 + p_i0_j1) / 3, 0.5f, 0.0f, 1.0f};
 				// glm::vec4 cartoonColor2 = {(p_i1_j0 + p_i0_j1 + p_i1_j1) / 3, 0.5f, 0.0f, 1.0f};
@@ -153,7 +210,8 @@ struct app {
 		gfx::upload(terrain, gfx::index_buffer, indices);
 	}
 
-	glm::vec4 heightmapColor(float const height, const BIOME_TYPE biomeType = NORMAL) {
+	glm::vec4 heightmapColor(glm::vec4 const &vertex, const BIOME_TYPE biomeType = NORMAL) {
+		float colorParam = (perlin2d(vertex.x, vertex.z, perlinFreq) * 50 + vertex.y / scl) / 51;
 		switch (biomeType) {
 		case NORMAL:
 			return glm::vec4(perlin2d(height, height), 0.4f, 0.0f, 1.0f);
@@ -206,7 +264,6 @@ struct app {
 	}
 
 	void mousemove(double xpos, double ypos) {
-
 		if (mouse.buttons[GLFW_MOUSE_BUTTON_LEFT] && !imguiWindowHovered) {
 
 			if (firstmouse) {
@@ -277,8 +334,47 @@ struct app {
 		ImGui::SetWindowPos(windowPosition);
 		ImGui::SetWindowSize(windowSize);
 
-		if (ImGui::SliderFloat("Scale", &scl, 1.0f, 200.0f)) generateTerrain(width, height);
-		if (ImGui::SliderInt("Resolution", &resolution, 1.0f, 200.0f)) generateTerrain(width, height);
+		float newScl = scl;
+		if (ImGui::SliderFloat("Scale", &newScl, 1.0f, 200.0f)) {
+			/*for (auto &vert : vertices)
+				vert.pos.y = vert.pos.y / scl * newScl;*/
+
+			auto dx = (float)width / (resolution - 1);
+			auto dz = (float)height / (resolution - 1);
+
+			auto dw = 1.0f / (resolution - 1.0f) * width;
+			auto dh = 1.0f / (resolution - 1.0f) * height;
+
+			std::size_t k = 0;
+			for (int i = 0; i < resolution - 1; ++i) {
+				for (int j = 0; j < resolution - 1; ++j) {
+
+					vertices[k].pos.y = vertices[k].pos.y / scl * newScl;
+					vertices[k + 1].pos.y = vertices[k + 1].pos.y / scl * newScl;
+					vertices[k + 2].pos.y = vertices[k + 2].pos.y / scl * newScl;
+					vertices[k + 3].pos.y = vertices[k + 3].pos.y / scl * newScl;
+					vertices[k + 4].pos.y = vertices[k + 4].pos.y / scl * newScl;
+					vertices[k + 5].pos.y = vertices[k + 5].pos.y / scl * newScl;
+
+					glm::vec3 norm1 = perlin2d_normal((i + 0) * dw, (j + 0) * dh, newScl, perlinFreq);
+					glm::vec3 norm2 = perlin2d_normal((i + 1) * dw, (j + 0) * dh, newScl, perlinFreq);
+					glm::vec3 norm3 = perlin2d_normal((i + 0) * dw, (j + 1) * dh, newScl, perlinFreq);
+					glm::vec3 norm4 = perlin2d_normal((i + 1) * dw, (j + 1) * dh, newScl, perlinFreq);
+
+					vertices[k].normal = norm1;
+					vertices[k + 1].normal = norm2;
+					vertices[k + 2].normal = norm3;
+					vertices[k + 3].normal = norm4;
+					vertices[k + 4].normal = norm3;
+					vertices[k + 5].normal = norm2;
+
+					k += 6;
+				}
+			}
+			scl = newScl;
+			gfx::upload(terrain, gfx::vertex_buffer, vertices);
+		}
+		// if (ImGui::SliderInt("Resolution", &resolution, 1.0f, 200.0f)) generateTerrain(width, height); TODO
 		if (ImGui::SliderFloat("Noise Frequency", &perlinFreq, 0.001f, 0.1f)) generateTerrain(width, height);
 
 		const char *items[] = {"NORMAL", "RANDOM"};
@@ -301,9 +397,10 @@ struct app {
 	}
 
 	void render_terrain() {
-
 		gfx::use(basic_shader);
 		pvm = camera.projection() * camera.view();
+		nm = glm::mat4(1.0);
+		eyePos = camera.position;
 		gfx::draw(terrain);
 	}
 
@@ -387,7 +484,6 @@ struct app {
 };
 
 int main() {
-
 	app app;
 
 	[[maybe_unused]] auto &ctx = glfw::instance();

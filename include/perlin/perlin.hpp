@@ -1,4 +1,5 @@
-#include <stdio.h>
+#include <glm/glm.hpp>
+#include <limits>
 
 static int SEED = 0;
 
@@ -52,4 +53,19 @@ float perlin2d(float x, float y, float freq = 0.007f, int depth = 4) {
 	}
 
 	return fin / div;
+}
+
+glm::vec3 perlin2d_normal(float x, float y, float scl, float freq = 0.007f, int depth = 4) {
+	constexpr auto eps = 0.0001f;
+
+	const float sample_0 = perlin2d(x, y, freq, depth) * scl;
+	// const float sample_x1 = perlin2d(x - eps, y, freq, depth) * scl;
+	const float sample_x2 = perlin2d(x + eps, y, freq, depth) * scl;
+	// const float sample_y1 = perlin2d(x, y - eps, freq, depth) * scl;
+	const float sample_y2 = perlin2d(x, y + eps, freq, depth) * scl;
+
+	glm::vec3 dx(eps, sample_x2 - sample_0, 0);
+	glm::vec3 dy(0, sample_y2 - sample_0, eps);
+
+	return normalize(glm::cross(dy, dx));
 }
