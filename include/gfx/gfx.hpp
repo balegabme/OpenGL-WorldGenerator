@@ -416,5 +416,40 @@ namespace gfx {
 		glm::mat4 view() { return glm::lookAt(position, position + front, up); }
 		glm::mat4 projection() { return glm::perspective(glm::radians(fov), aspect, near, far); }
 	};
+	struct Triangle {
+		glm::vec3 vertex0;
+		glm::vec3 vertex1;
+		glm::vec3 vertex2;
+	};
+
+	bool rayIntersectsTriangle(glm::vec3 rayOrigin, glm::vec3 rayVector, const Triangle &inTriangle, glm::vec3 &outIntersectionPoint) {
+		const float EPSILON = 0.0000001;
+		glm::vec3 vertex0 = inTriangle.vertex0;
+		glm::vec3 vertex1 = inTriangle.vertex1;
+		glm::vec3 vertex2 = inTriangle.vertex2;
+		glm::vec3 edge1, edge2, h, s, q;
+		float a, f, u, v;
+		edge1 = vertex1 - vertex0;
+		edge2 = vertex2 - vertex0;
+		h = glm::cross(rayVector, edge2);
+		a = glm::dot(edge1, h);
+		if (a > -EPSILON && a < EPSILON) return false; // This ray is parallel to this triangle.
+		f = 1.0 / a;
+		s = rayOrigin - vertex0;
+		u = f * glm::dot(s, h);
+		if (u < 0.0 || u > 1.0) return false;
+		q = glm::cross(s, edge1);
+		v = f * glm::dot(rayVector, q);
+		if (v < 0.0 || u + v > 1.0) return false;
+		// At this stage we can compute t to find out where the intersection point is on the line.
+		float t = f * glm::dot(edge2, q);
+		std::cout << t << std::endl;
+		if (t > EPSILON) // ray intersection
+		{
+			outIntersectionPoint = rayOrigin + rayVector * t;
+			return true;
+		} else // This means that there is a line intersection but not a ray intersection.
+			return false;
+	}
 
 } // namespace gfx
