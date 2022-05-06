@@ -32,8 +32,6 @@ struct app {
 	gfx::buffer<Vertex> terrain;
 	std::vector<Vertex> vertices;
 	std::vector<unsigned int> indices;
-	std::vector<Vertex> modifyVertices;
-	std::vector<unsigned int> modifyIndices;
 
 	float scl = 100.0f;
 	int resolution = 400;
@@ -191,20 +189,19 @@ struct app {
 	void mousebutton(int button, int action, int mode) {
 		mouse.buttons[button] = (GLFW_PRESS == action);
 		if (mouse.buttons[GLFW_MOUSE_BUTTON_LEFT]) {
-
 			glm::vec3 unprojectNear(0.0f, 0.0f, 0.0f);
 			glm::vec3 unprojectFar(0.0f, 0.0f, 0.0f);
 			screenToWorldVertex(mouse.lastX, windowHeight - mouse.lastY, unprojectNear, unprojectFar);
 
 			glm::vec3 origin = camera.position;
 			glm::vec3 vector = glm::normalize(unprojectNear - unprojectFar);
-			Triangle triangle;
+			gfx::Triangle triangle;
 			glm::vec3 intersectPoint;
 			for (unsigned int i = 0; i < std::size(indices); i += 3) {
 				triangle.vertex0 = vertices[i].pos;
 				triangle.vertex1 = vertices[i + 1].pos;
 				triangle.vertex2 = vertices[i + 2].pos;
-				if (rayIntersectsTriangle(origin, vector, triangle, intersectPoint)) {
+				if (gfx::rayIntersectsTriangle(origin, vector, triangle, intersectPoint)) {
 					std::cout << "Intersection Point [ x: " << intersectPoint[0] << " y: " << intersectPoint[1] << " z: " << intersectPoint[2] << " ]" << std::endl;
 					vertices[i].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
 					vertices[i + 1].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
@@ -257,9 +254,6 @@ struct app {
 	void screenToWorldVertex(double xpos, double ypos, glm::vec3 &unprojNear, glm::vec3 &unprojFar) {
 		unprojNear = glm::unProject(glm::vec3(xpos, ypos, camera.near), camera.view(), camera.projection(), glm::vec4(0, 0, windowWidth, windowHeight));
 		unprojFar = glm::unProject(glm::vec3(xpos, ypos, camera.far), camera.view(), camera.projection(), glm::vec4(0, 0, windowWidth, windowHeight));
-		// std::cout << "Near: [ " << unprojNear[0] << unprojNear[1] << unprojNear[2] << " ]" << std::endl;
-		// std::cout << "Far: [ " << unprojFar[0] << unprojFar[1] << unprojFar[2] << " ]" << std::endl;
-		// std::cout << "Size: " << sqrt(std::pow(unprojFar[0] - unprojNear[0], 2) + std::pow(unprojFar[1] - unprojNear[1], 2) + std::pow(unprojFar[2] - unprojNear[2], 2)) << std::endl;
 	}
 
 	void resize(int width, int height) {
@@ -365,42 +359,6 @@ struct app {
 	void update(float dt) {
 		cameramove(dt);
 		render();
-	}
-
-	struct Triangle {
-		glm::vec3 vertex0;
-		glm::vec3 vertex1;
-		glm::vec3 vertex2;
-	};
-
-	bool rayIntersectsTriangle(glm::vec3 rayOrigin, glm::vec3 rayVector, const Triangle &inTriangle, glm::vec3 &outIntersectionPoint) {
-		const float EPSILON = 0.0000001;
-		glm::vec3 vertex0 = inTriangle.vertex0;
-		glm::vec3 vertex1 = inTriangle.vertex1;
-		glm::vec3 vertex2 = inTriangle.vertex2;
-		glm::vec3 edge1, edge2, h, s, q;
-		float a, f, u, v;
-		edge1 = vertex1 - vertex0;
-		edge2 = vertex2 - vertex0;
-		h = glm::cross(rayVector, edge2);
-		a = glm::dot(edge1, h);
-		if (a > -EPSILON && a < EPSILON) return false; // This ray is parallel to this triangle.
-		f = 1.0 / a;
-		s = rayOrigin - vertex0;
-		u = f * glm::dot(s, h);
-		if (u < 0.0 || u > 1.0) return false;
-		q = glm::cross(s, edge1);
-		v = f * glm::dot(rayVector, q);
-		if (v < 0.0 || u + v > 1.0) return false;
-		// At this stage we can compute t to find out where the intersection point is on the line.
-		float t = f * glm::dot(edge2, q);
-		std::cout << t << std::endl;
-		if (t > EPSILON) // ray intersection
-		{
-			outIntersectionPoint = rayOrigin + rayVector * t;
-			return true;
-		} else // This means that there is a line intersection but not a ray intersection.
-			return false;
 	}
 };
 
