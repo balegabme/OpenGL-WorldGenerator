@@ -56,7 +56,7 @@ float perlin2d(float x, float y, float freq = 0.007f, int depth = 4) {
 }
 
 glm::vec3 perlin2d_normal(float x, float y, float scl, float freq = 0.007f, int depth = 4) {
-	constexpr auto eps = 0.0001f;
+	constexpr auto eps = 0.01f;
 
 	const float sample_0 = perlin2d(x, y, freq, depth) * scl;
 	// const float sample_x1 = perlin2d(x - eps, y, freq, depth) * scl;

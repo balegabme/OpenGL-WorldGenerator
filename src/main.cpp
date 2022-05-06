@@ -35,11 +35,9 @@ struct app {
 	gfx::buffer<Vertex> terrain;
 	std::vector<Vertex> vertices;
 	std::vector<unsigned int> indices;
-	std::vector<Vertex> modifyVertices;
-	std::vector<unsigned int> modifyIndices;
 
 	float scl = 100.0f;
-	int resolution = 100;
+	int resolution = 200;
 	int width = 100;
 	int height = 100;
 	float perlinFreq = 0.01f;
@@ -89,7 +87,7 @@ struct app {
 			const vec3 ambientColor = vec3(0.0f, 0.0f, 0.0f);
 
 			const vec3 specColor = vec3(1.0f, 1.0f, 1.0f);
-			const float shininess = 16.0f;
+			const float shininess = 8.0f;
 
 			uniform mat4 pvm;
 			uniform mat4 nm;
@@ -174,27 +172,13 @@ struct app {
 				glm::vec3 norm3 = perlin2d_normal((i + 0) * dw, (j + 1) * dh, scl, perlinFreq);
 				glm::vec3 norm4 = perlin2d_normal((i + 1) * dw, (j + 1) * dh, scl, perlinFreq);
 
-				// glm::vec4 cartoonColor1 = {(p_i0_j0 + p_i1_j0 + p_i0_j1) / 3, 0.5f, 0.0f, 1.0f};
-				// glm::vec4 cartoonColor2 = {(p_i1_j0 + p_i0_j1 + p_i1_j1) / 3, 0.5f, 0.0f, 1.0f};
-				// glm::vec4 randomColor1 = gfx::randVec4();
-				// glm::vec4 randomColor2 = gfx::randVec4();
-				// randomColor1.a = randomColor2.a = 1.0f;
+				vertices.push_back({pos1, heightmapColor(pos1, biomeType), norm1});
+				vertices.push_back({pos2, heightmapColor(pos2, biomeType), norm2});
+				vertices.push_back({pos3, heightmapColor(pos3, biomeType), norm3});
 
-				vertices.push_back({pos1, heightmapColor(pos1, biomeType)});
-				vertices.push_back({pos2, heightmapColor(pos2, biomeType)});
-				vertices.push_back({pos3, heightmapColor(pos3, biomeType)});
-
-				/*vertices.push_back({glm::vec4{i * dx, p_i0_j0 * scl, j * dz, 1.0f}, randomColor1});
-				vertices.push_back({pos2, randomColor1});
-				vertices.push_back({pos3, randomColor1});*/
-
-				vertices.push_back({pos4, heightmapColor(pos4, biomeType)});
-				vertices.push_back({pos3, heightmapColor(pos3, biomeType)});
-				vertices.push_back({pos2, heightmapColor(pos2, biomeType)});
-
-				/*vertices.push_back({glm::vec4{(i + 1) * dx, p_i1_j1 * scl, (j + 1) * dz, 1.0f}, randomColor2});
-				vertices.push_back({pos3, randomColor2});
-				vertices.push_back({pos2, randomColor2});*/
+				vertices.push_back({pos4, heightmapColor(pos4, biomeType), norm4});
+				vertices.push_back({pos3, heightmapColor(pos3, biomeType), norm3});
+				vertices.push_back({pos2, heightmapColor(pos2, biomeType), norm2});
 
 				indices.push_back(std::size(indices));
 				indices.push_back(std::size(indices));
@@ -241,20 +225,19 @@ struct app {
 	void mousebutton(int button, int action, int mode) {
 		mouse.buttons[button] = (GLFW_PRESS == action);
 		if (mouse.buttons[GLFW_MOUSE_BUTTON_LEFT]) {
-
 			glm::vec3 unprojectNear(0.0f, 0.0f, 0.0f);
 			glm::vec3 unprojectFar(0.0f, 0.0f, 0.0f);
 			screenToWorldVertex(mouse.lastX, windowHeight - mouse.lastY, unprojectNear, unprojectFar);
 
 			glm::vec3 origin = camera.position;
 			glm::vec3 vector = glm::normalize(unprojectNear - unprojectFar);
-			Triangle triangle;
+			gfx::Triangle triangle;
 			glm::vec3 intersectPoint;
 			for (unsigned int i = 0; i < std::size(indices); i += 3) {
 				triangle.vertex0 = vertices[i].pos;
 				triangle.vertex1 = vertices[i + 1].pos;
 				triangle.vertex2 = vertices[i + 2].pos;
-				if (rayIntersectsTriangle(origin, vector, triangle, intersectPoint)) {
+				if (gfx::rayIntersectsTriangle(origin, vector, triangle, intersectPoint)) {
 					std::cout << "Intersection Point [ x: " << intersectPoint[0] << " y: " << intersectPoint[1] << " z: " << intersectPoint[2] << " ]" << std::endl;
 					vertices[i].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
 					vertices[i + 1].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
@@ -306,9 +289,6 @@ struct app {
 	void screenToWorldVertex(double xpos, double ypos, glm::vec3 &unprojNear, glm::vec3 &unprojFar) {
 		unprojNear = glm::unProject(glm::vec3(xpos, ypos, camera.near), camera.view(), camera.projection(), glm::vec4(0, 0, windowWidth, windowHeight));
 		unprojFar = glm::unProject(glm::vec3(xpos, ypos, camera.far), camera.view(), camera.projection(), glm::vec4(0, 0, windowWidth, windowHeight));
-		// std::cout << "Near: [ " << unprojNear[0] << unprojNear[1] << unprojNear[2] << " ]" << std::endl;
-		// std::cout << "Far: [ " << unprojFar[0] << unprojFar[1] << unprojFar[2] << " ]" << std::endl;
-		// std::cout << "Size: " << sqrt(std::pow(unprojFar[0] - unprojNear[0], 2) + std::pow(unprojFar[1] - unprojNear[1], 2) + std::pow(unprojFar[2] - unprojNear[2], 2)) << std::endl;
 	}
 
 	void resize(int width, int height) {
@@ -448,42 +428,6 @@ struct app {
 	void update(float dt) {
 		cameramove(dt);
 		render();
-	}
-
-	struct Triangle {
-		glm::vec3 vertex0;
-		glm::vec3 vertex1;
-		glm::vec3 vertex2;
-	};
-
-	bool rayIntersectsTriangle(glm::vec3 rayOrigin, glm::vec3 rayVector, const Triangle &inTriangle, glm::vec3 &outIntersectionPoint) {
-		const float EPSILON = 0.0000001;
-		glm::vec3 vertex0 = inTriangle.vertex0;
-		glm::vec3 vertex1 = inTriangle.vertex1;
-		glm::vec3 vertex2 = inTriangle.vertex2;
-		glm::vec3 edge1, edge2, h, s, q;
-		float a, f, u, v;
-		edge1 = vertex1 - vertex0;
-		edge2 = vertex2 - vertex0;
-		h = glm::cross(rayVector, edge2);
-		a = glm::dot(edge1, h);
-		if (a > -EPSILON && a < EPSILON) return false; // This ray is parallel to this triangle.
-		f = 1.0 / a;
-		s = rayOrigin - vertex0;
-		u = f * glm::dot(s, h);
-		if (u < 0.0 || u > 1.0) return false;
-		q = glm::cross(s, edge1);
-		v = f * glm::dot(rayVector, q);
-		if (v < 0.0 || u + v > 1.0) return false;
-		// At this stage we can compute t to find out where the intersection point is on the line.
-		float t = f * glm::dot(edge2, q);
-		std::cout << t << std::endl;
-		if (t > EPSILON) // ray intersection
-		{
-			outIntersectionPoint = rayOrigin + rayVector * t;
-			return true;
-		} else // This means that there is a line intersection but not a ray intersection.
-			return false;
 	}
 };
 
