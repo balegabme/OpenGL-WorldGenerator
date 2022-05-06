@@ -26,6 +26,7 @@ struct app {
 	glfw::keyboard keyboard;
 
 	gfx::camera camera;
+	float deltatime;
 
 	gfx::shader basic_shader;
 	gfx::uniform<glm::mat4> pvm;
@@ -214,6 +215,81 @@ struct app {
 		}
 	}
 
+	void terraformingOnClick() {
+		glm::vec3 unprojectNear(0.0f, 0.0f, 0.0f);
+		glm::vec3 unprojectFar(0.0f, 0.0f, 0.0f);
+		screenToWorldVertex(mouse.lastX, windowHeight - mouse.lastY, unprojectNear, unprojectFar);
+
+		glm::vec3 origin = camera.position;
+		glm::vec3 vector = glm::normalize(unprojectNear - unprojectFar);
+		gfx::Triangle triangle;
+		glm::vec3 intersectionPoint;
+		std::optional<Vertex> clicked;
+		bool intersectionHappened = false;
+
+		for (unsigned int i = 0; i < std::size(indices); i += 3) {
+			triangle.vertex0 = vertices[i].pos;
+			triangle.vertex1 = vertices[i + 1].pos;
+			triangle.vertex2 = vertices[i + 2].pos;
+			if (gfx::rayIntersectsTriangle(origin, vector, triangle, intersectionPoint)) {
+				intersectionHappened = true;
+				if (sqrt(pow(intersectionPoint.x - vertices[i].pos.x, 2) + pow(intersectionPoint.y - vertices[i].pos.y, 2) + pow(intersectionPoint.z - vertices[i].pos.z, 2)) <
+					sqrt(pow(intersectionPoint.x - vertices[i + 1].pos.x, 2) + pow(intersectionPoint.y - vertices[i + 1].pos.y, 2) + pow(intersectionPoint.z - vertices[i + 1].pos.z, 2)))
+					clicked = vertices[i];
+				else if (sqrt(pow(intersectionPoint.x - vertices[i + 1].pos.x, 2) + pow(intersectionPoint.y - vertices[i + 1].pos.y, 2) + pow(intersectionPoint.z - vertices[i + 1].pos.z, 2)) <
+						 sqrt(pow(intersectionPoint.x - vertices[i + 2].pos.x, 2) + pow(intersectionPoint.y - vertices[i + 2].pos.y, 2) + pow(intersectionPoint.z - vertices[i + 2].pos.z, 2)))
+					clicked = vertices[i + 1];
+				else if (sqrt(pow(intersectionPoint.x - vertices[i + 2].pos.x, 2) + pow(intersectionPoint.y - vertices[i + 2].pos.y, 2) + pow(intersectionPoint.z - vertices[i + 2].pos.z, 2)) <
+						 sqrt(pow(intersectionPoint.x - vertices[i].pos.x, 2) + pow(intersectionPoint.y - vertices[i].pos.y, 2) + pow(intersectionPoint.z - vertices[i].pos.z, 2)))
+					clicked = vertices[i + 2];
+
+				vertices[i].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
+				vertices[i + 1].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
+				vertices[i + 2].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
+
+				gfx::upload(terrain, gfx::vertex_buffer, vertices);
+			}
+		}
+
+		if (clicked) {
+			for (auto &vert : vertices) {
+				const float dist = (sqrt(pow(clicked.value().pos.x - vert.pos.x, 2) + pow(clicked.value().pos.y - vert.pos.y, 2) + pow(clicked.value().pos.z - vert.pos.z, 2)));
+				float scale = 1.0f / (1.0f + pow(dist, 2));
+				if (scale > 0.1) vert.pos.y += scale;
+			}
+		}
+	}
+
+	void rotateCamera(double xpos, double ypos) {
+		if (firstmouse) {
+			mouse.lastX = xpos;
+			mouse.lastY = ypos;
+			firstmouse = false;
+		}
+
+		float xoffset = xpos - mouse.lastX;
+		float yoffset = mouse.lastY - ypos;
+		mouse.lastX = xpos;
+		mouse.lastY = ypos;
+
+		xoffset *= mouse.sensitivity;
+		yoffset *= mouse.sensitivity;
+
+		camera.yaw -= xoffset;
+		camera.pitch -= yoffset;
+
+		if (camera.pitch > 89.0f) camera.pitch = 89.0f;
+		if (camera.pitch < -89.0f) camera.pitch = -89.0f;
+
+		glm::vec3 direction;
+		direction.x = cos(glm::radians(camera.yaw)) * cos(glm::radians(camera.pitch));
+		direction.y = sin(glm::radians(camera.pitch));
+		direction.z = sin(glm::radians(camera.yaw)) * cos(glm::radians(camera.pitch));
+		camera.front = glm::normalize(direction);
+
+		camera.update_camera_vectors();
+	}
+
 	void key(int key, int scancode, int action, int mods) {
 		if (action == GLFW_PRESS) {
 			keyboard.keys[key] = true;
@@ -225,65 +301,22 @@ struct app {
 	void mousebutton(int button, int action, int mode) {
 		mouse.buttons[button] = (GLFW_PRESS == action);
 		if (mouse.buttons[GLFW_MOUSE_BUTTON_LEFT]) {
-			glm::vec3 unprojectNear(0.0f, 0.0f, 0.0f);
-			glm::vec3 unprojectFar(0.0f, 0.0f, 0.0f);
-			screenToWorldVertex(mouse.lastX, windowHeight - mouse.lastY, unprojectNear, unprojectFar);
-
-			glm::vec3 origin = camera.position;
-			glm::vec3 vector = glm::normalize(unprojectNear - unprojectFar);
-			gfx::Triangle triangle;
-			glm::vec3 intersectPoint;
-			for (unsigned int i = 0; i < std::size(indices); i += 3) {
-				triangle.vertex0 = vertices[i].pos;
-				triangle.vertex1 = vertices[i + 1].pos;
-				triangle.vertex2 = vertices[i + 2].pos;
-				if (gfx::rayIntersectsTriangle(origin, vector, triangle, intersectPoint)) {
-					std::cout << "Intersection Point [ x: " << intersectPoint[0] << " y: " << intersectPoint[1] << " z: " << intersectPoint[2] << " ]" << std::endl;
-					vertices[i].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
-					vertices[i + 1].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
-					vertices[i + 2].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
-
-					gfx::upload(terrain, gfx::vertex_buffer, vertices);
-				}
-			}
-			// std::cout << rayIntersectsTriangle(origin, vector, &triangle, intersectPoint) << " " << intersectPoint[1];
+			terraformingOnClick();
 		}
 	}
 
 	void mousemove(double xpos, double ypos) {
 		if (mouse.buttons[GLFW_MOUSE_BUTTON_LEFT] && !imguiWindowHovered) {
-
-			if (firstmouse) {
-				mouse.lastX = xpos;
-				mouse.lastY = ypos;
-				firstmouse = false;
-			}
-
-			float xoffset = xpos - mouse.lastX;
-			float yoffset = mouse.lastY - ypos;
-			mouse.lastX = xpos;
-			mouse.lastY = ypos;
-
-			xoffset *= mouse.sensitivity;
-			yoffset *= mouse.sensitivity;
-
-			camera.yaw -= xoffset;
-			camera.pitch -= yoffset;
-
-			if (camera.pitch > 89.0f) camera.pitch = 89.0f;
-			if (camera.pitch < -89.0f) camera.pitch = -89.0f;
-
-			glm::vec3 direction;
-			direction.x = cos(glm::radians(camera.yaw)) * cos(glm::radians(camera.pitch));
-			direction.y = sin(glm::radians(camera.pitch));
-			direction.z = sin(glm::radians(camera.yaw)) * cos(glm::radians(camera.pitch));
-			camera.front = glm::normalize(direction);
-
-			camera.update_camera_vectors();
+			rotateCamera(xpos, ypos);
 		}
 
 		mouse.lastX = xpos;
 		mouse.lastY = ypos;
+	}
+
+	void mousewheel(double xoffset, double yoffset) {
+		constexpr auto speed = 70;
+		camera.position += camera.worldup * deltatime * yoffset * speed;
 	}
 
 	void screenToWorldVertex(double xpos, double ypos, glm::vec3 &unprojNear, glm::vec3 &unprojFar) {
@@ -398,7 +431,7 @@ struct app {
 	}
 
 	void cameramove(float dt) {
-		constexpr auto speed = 10;
+		constexpr auto speed = 70;
 		if (keyboard.keys[GLFW_KEY_W]) {
 			glm::vec3 m = glm::normalize(glm::vec3{camera.front.x, 0.0f, camera.front.z});
 
@@ -426,6 +459,7 @@ struct app {
 	}
 
 	void update(float dt) {
+		deltatime = dt;
 		cameramove(dt);
 		render();
 	}
@@ -450,6 +484,7 @@ int main() {
 	glfw::on(wnd, glfw::mousemove, [&](glfw::window &window, double xpos, double ypos) { app.mousemove(xpos, ypos); });
 	glfw::on(wnd, glfw::mousebutton, [&](glfw::window &window, int button, int action, int mode) { app.mousebutton(button, action, mode); });
 	glfw::on(wnd, glfw::key, [&](glfw::window &window, int key, int scancode, int action, int mods) { app.key(key, scancode, action, mods); });
+	glfw::on(wnd, glfw::scroll, [&](glfw::window &window, double xoffset, double yoffset) { app.mousewheel(xoffset, yoffset); });
 
 	app.init();
 

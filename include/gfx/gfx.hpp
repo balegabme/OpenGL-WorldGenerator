@@ -1,9 +1,12 @@
 #pragma once
 
 #include <array>
+#include <cmath>
+#include <optional>
 #include <random>
 #include <stdexcept>
 #include <vector>
+
 
 #include <iostream>
 
