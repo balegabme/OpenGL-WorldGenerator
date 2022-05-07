@@ -37,6 +37,8 @@ struct app {
 	std::vector<Vertex> vertices;
 	std::vector<unsigned int> indices;
 
+	float brushSize = 1.0f;
+
 	float scl = 100.0f;
 	int resolution = 200;
 	int width = 100;
@@ -118,6 +120,7 @@ struct app {
 
 				} 
 				sumColor += ambientColor;
+				sumColor = abs(nor);
 				fragColor = vec4(sumColor, 1.0f);
 
 			}
@@ -215,48 +218,43 @@ struct app {
 		}
 	}
 
+	glm::vec3 firstIntersectionPoint() {}
+
 	void terraformingOnClick() {
 		glm::vec3 unprojectNear(0.0f, 0.0f, 0.0f);
 		glm::vec3 unprojectFar(0.0f, 0.0f, 0.0f);
-		screenToWorldVertex(mouse.lastX, windowHeight - mouse.lastY, unprojectNear, unprojectFar);
+		camera.screenToWorldVertex(mouse.lastX, windowHeight - mouse.lastY, unprojectNear, unprojectFar, windowWidth, windowHeight);
 
 		glm::vec3 origin = camera.position;
 		glm::vec3 vector = glm::normalize(unprojectNear - unprojectFar);
 		gfx::Triangle triangle;
-		glm::vec3 intersectionPoint;
-		std::optional<Vertex> clicked;
-		bool intersectionHappened = false;
+		std::optional<glm::vec3> intersectionPoint;
+		float intersectionPointDistance;
+		float lastIntersectionPointDistance = std::numeric_limits<float>::max();
 
 		for (unsigned int i = 0; i < std::size(indices); i += 3) {
+
 			triangle.vertex0 = vertices[i].pos;
 			triangle.vertex1 = vertices[i + 1].pos;
 			triangle.vertex2 = vertices[i + 2].pos;
-			if (gfx::rayIntersectsTriangle(origin, vector, triangle, intersectionPoint)) {
-				intersectionHappened = true;
-				if (sqrt(pow(intersectionPoint.x - vertices[i].pos.x, 2) + pow(intersectionPoint.y - vertices[i].pos.y, 2) + pow(intersectionPoint.z - vertices[i].pos.z, 2)) <
-					sqrt(pow(intersectionPoint.x - vertices[i + 1].pos.x, 2) + pow(intersectionPoint.y - vertices[i + 1].pos.y, 2) + pow(intersectionPoint.z - vertices[i + 1].pos.z, 2)))
-					clicked = vertices[i];
-				else if (sqrt(pow(intersectionPoint.x - vertices[i + 1].pos.x, 2) + pow(intersectionPoint.y - vertices[i + 1].pos.y, 2) + pow(intersectionPoint.z - vertices[i + 1].pos.z, 2)) <
-						 sqrt(pow(intersectionPoint.x - vertices[i + 2].pos.x, 2) + pow(intersectionPoint.y - vertices[i + 2].pos.y, 2) + pow(intersectionPoint.z - vertices[i + 2].pos.z, 2)))
-					clicked = vertices[i + 1];
-				else if (sqrt(pow(intersectionPoint.x - vertices[i + 2].pos.x, 2) + pow(intersectionPoint.y - vertices[i + 2].pos.y, 2) + pow(intersectionPoint.z - vertices[i + 2].pos.z, 2)) <
-						 sqrt(pow(intersectionPoint.x - vertices[i].pos.x, 2) + pow(intersectionPoint.y - vertices[i].pos.y, 2) + pow(intersectionPoint.z - vertices[i].pos.z, 2)))
-					clicked = vertices[i + 2];
 
-				vertices[i].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
-				vertices[i + 1].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
-				vertices[i + 2].color = glm::vec4(1.0, 0.0, 0.0, 1.0);
+			if (gfx::rayIntersectsTriangle(origin, vector, triangle, intersectionPointDistance)) {
+				if (intersectionPointDistance < lastIntersectionPointDistance) {
 
-				gfx::upload(terrain, gfx::vertex_buffer, vertices);
+					lastIntersectionPointDistance = intersectionPointDistance;
+					intersectionPoint = vector * intersectionPointDistance + origin;
+				}
 			}
 		}
 
-		if (clicked) {
+		if (intersectionPoint) {
 			for (auto &vert : vertices) {
-				const float dist = (sqrt(pow(clicked.value().pos.x - vert.pos.x, 2) + pow(clicked.value().pos.y - vert.pos.y, 2) + pow(clicked.value().pos.z - vert.pos.z, 2)));
-				float scale = 1.0f / (1.0f + pow(dist, 2));
+				const float dist = glm::distance(*intersectionPoint, glm::vec3(vert.pos));
+				float scale = 1.0f / (1.0f + 1 / brushSize * pow(dist, 2));
 				if (scale > 0.1) vert.pos.y += scale;
 			}
+
+			gfx::upload(terrain, gfx::vertex_buffer, vertices);
 		}
 	}
 
@@ -299,7 +297,11 @@ struct app {
 	}
 
 	void mousebutton(int button, int action, int mode) {
-		mouse.buttons[button] = (GLFW_PRESS == action);
+		if (action == GLFW_PRESS) {
+			mouse.buttons[button] = true;
+		} else if (action == GLFW_RELEASE) {
+			mouse.buttons[button] = false;
+		}
 		if (mouse.buttons[GLFW_MOUSE_BUTTON_LEFT]) {
 			terraformingOnClick();
 		}
@@ -317,11 +319,6 @@ struct app {
 	void mousewheel(double xoffset, double yoffset) {
 		constexpr auto speed = 70;
 		camera.position += camera.worldup * deltatime * yoffset * speed;
-	}
-
-	void screenToWorldVertex(double xpos, double ypos, glm::vec3 &unprojNear, glm::vec3 &unprojFar) {
-		unprojNear = glm::unProject(glm::vec3(xpos, ypos, camera.near), camera.view(), camera.projection(), glm::vec4(0, 0, windowWidth, windowHeight));
-		unprojFar = glm::unProject(glm::vec3(xpos, ypos, camera.far), camera.view(), camera.projection(), glm::vec4(0, 0, windowWidth, windowHeight));
 	}
 
 	void resize(int width, int height) {
@@ -393,6 +390,7 @@ struct app {
 		}
 		// if (ImGui::SliderInt("Resolution", &resolution, 1.0f, 200.0f)) generateTerrain(width, height); TODO
 		if (ImGui::SliderFloat("Noise Frequency", &perlinFreq, 0.001f, 0.1f)) generateTerrain(width, height);
+		ImGui::SliderFloat("Brush Size", &brushSize, 1.0f, 10.0f);
 
 		const char *items[] = {"NORMAL", "RANDOM"};
 		static int selected_item = 0;

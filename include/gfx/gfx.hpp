@@ -7,7 +7,6 @@
 #include <stdexcept>
 #include <vector>
 
-
 #include <iostream>
 
 #include <glad/glad.h>
@@ -415,6 +414,10 @@ namespace gfx {
 			yaw = glm::degrees(acos(front.x / cos(pitch)));
 			pitch = glm::degrees(pitch);
 		}
+		void screenToWorldVertex(double xpos, double ypos, glm::vec3 &unprojNear, glm::vec3 &unprojFar, int windowWidth, int windowHeight) {
+			unprojNear = glm::unProject(glm::vec3(xpos, ypos, near), view(), projection(), glm::vec4(0, 0, windowWidth, windowHeight));
+			unprojFar = glm::unProject(glm::vec3(xpos, ypos, far), view(), projection(), glm::vec4(0, 0, windowWidth, windowHeight));
+		}
 
 		glm::mat4 view() { return glm::lookAt(position, position + front, up); }
 		glm::mat4 projection() { return glm::perspective(glm::radians(fov), aspect, near, far); }
@@ -425,7 +428,7 @@ namespace gfx {
 		glm::vec3 vertex2;
 	};
 
-	bool rayIntersectsTriangle(glm::vec3 rayOrigin, glm::vec3 rayVector, const Triangle &inTriangle, glm::vec3 &outIntersectionPoint) {
+	bool rayIntersectsTriangle(glm::vec3 rayOrigin, glm::vec3 rayVector, const Triangle &inTriangle, float &outIntersectionPointDistance) {
 		const float EPSILON = 0.0000001;
 		glm::vec3 vertex0 = inTriangle.vertex0;
 		glm::vec3 vertex1 = inTriangle.vertex1;
@@ -446,10 +449,9 @@ namespace gfx {
 		if (v < 0.0 || u + v > 1.0) return false;
 		// At this stage we can compute t to find out where the intersection point is on the line.
 		float t = f * glm::dot(edge2, q);
-		std::cout << t << std::endl;
 		if (t > EPSILON) // ray intersection
 		{
-			outIntersectionPoint = rayOrigin + rayVector * t;
+			outIntersectionPointDistance = t;
 			return true;
 		} else // This means that there is a line intersection but not a ray intersection.
 			return false;
