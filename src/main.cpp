@@ -21,6 +21,7 @@ struct app {
 	bool firstmouse = true;
 	bool randomBiomeFlag = false;
 	bool imguiWindowHovered = false;
+	bool brushFlag = false;
 
 	glfw::mouse mouse;
 	glfw::keyboard keyboard;
@@ -41,8 +42,8 @@ struct app {
 
 	float scl = 100.0f;
 	int resolution = 200;
-	int width = 100;
-	int height = 100;
+	int width = 1000;
+	int height = 1000;
 	float perlinFreq = 0.01f;
 
 	~app() noexcept { gfx::destroy(terrain); }
@@ -120,7 +121,6 @@ struct app {
 
 				} 
 				sumColor += ambientColor;
-				sumColor = abs(nor);
 				fragColor = vec4(sumColor, 1.0f);
 
 			}
@@ -218,8 +218,6 @@ struct app {
 		}
 	}
 
-	glm::vec3 firstIntersectionPoint() {}
-
 	void terraformingOnClick() {
 		glm::vec3 unprojectNear(0.0f, 0.0f, 0.0f);
 		glm::vec3 unprojectFar(0.0f, 0.0f, 0.0f);
@@ -249,7 +247,7 @@ struct app {
 
 		if (intersectionPoint) {
 			for (auto &vert : vertices) {
-				const float dist = glm::distance(*intersectionPoint, glm::vec3(vert.pos));
+				const float dist = glm::distance(*intersectionPoint, glm::vec3(vert.pos)) / ((width / (resolution - 1) + height / (resolution - 1)) / 2);
 				float scale = 1.0f / (1.0f + 1 / brushSize * pow(dist, 2));
 				if (scale > 0.1) vert.pos.y += scale;
 			}
@@ -302,13 +300,10 @@ struct app {
 		} else if (action == GLFW_RELEASE) {
 			mouse.buttons[button] = false;
 		}
-		if (mouse.buttons[GLFW_MOUSE_BUTTON_LEFT]) {
-			terraformingOnClick();
-		}
 	}
 
 	void mousemove(double xpos, double ypos) {
-		if (mouse.buttons[GLFW_MOUSE_BUTTON_LEFT] && !imguiWindowHovered) {
+		if (mouse.buttons[GLFW_MOUSE_BUTTON_LEFT] && !imguiWindowHovered && !brushFlag) {
 			rotateCamera(xpos, ypos);
 		}
 
@@ -329,7 +324,7 @@ struct app {
 	}
 
 	void render_gui() {
-		auto guiWindowWidth = 300;
+		auto guiWindowWidth = 350;
 		auto guiWindowHeight = 200;
 		ImVec2 windowPosition = ImVec2(windowWidth - guiWindowWidth, 0);
 		ImVec2 windowSize = ImVec2(guiWindowWidth, guiWindowHeight);
@@ -337,7 +332,7 @@ struct app {
 		ImGuiWindowFlags window_flags = 0;
 		window_flags |= ImGuiWindowFlags_NoMove;
 		window_flags |= ImGuiWindowFlags_NoResize;
-		window_flags |= ImGuiWindowFlags_NoCollapse;
+		// window_flags |= ImGuiWindowFlags_NoCollapse;
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -388,8 +383,11 @@ struct app {
 			scl = newScl;
 			gfx::upload(terrain, gfx::vertex_buffer, vertices);
 		}
+
 		// if (ImGui::SliderInt("Resolution", &resolution, 1.0f, 200.0f)) generateTerrain(width, height); TODO
 		if (ImGui::SliderFloat("Noise Frequency", &perlinFreq, 0.001f, 0.1f)) generateTerrain(width, height);
+		ImGui::Checkbox(" ", &brushFlag);
+		ImGui::SameLine(0, 0);
 		ImGui::SliderFloat("Brush Size", &brushSize, 1.0f, 10.0f);
 
 		const char *items[] = {"NORMAL", "RANDOM"};
@@ -399,7 +397,12 @@ struct app {
 		if (ImGui::Combo("Biome Type", &selected_item, items, IM_ARRAYSIZE(items))) {
 			if (selected_item == 0) biomeType = NORMAL;
 			if (selected_item == 1) biomeType = RANDOM;
-			if (previous_item != selected_item) generateTerrain(width, height);
+			if (previous_item != selected_item) {
+				for (auto &vert : vertices)
+					vert.color = heightmapColor(vert.pos, biomeType);
+
+				gfx::upload(terrain, gfx::vertex_buffer, vertices);
+			}
 			previous_item = selected_item;
 		}
 
@@ -459,6 +462,9 @@ struct app {
 	void update(float dt) {
 		deltatime = dt;
 		cameramove(dt);
+		if (mouse.buttons[GLFW_MOUSE_BUTTON_LEFT] && !imguiWindowHovered && brushFlag) {
+			terraformingOnClick();
+		}
 		render();
 	}
 };

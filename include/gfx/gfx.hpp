@@ -359,7 +359,7 @@ namespace gfx {
 		constexpr static float PITCH = 0.0f;
 		constexpr static float FOV = 45.0f;
 		constexpr static float near = 0.1f;
-		constexpr static float far = 200.0f;
+		constexpr static float far = 2000.0f;
 
 		glm::vec3 position;
 		glm::vec3 front;
