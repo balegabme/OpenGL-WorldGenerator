@@ -46,7 +46,9 @@ class PerlinNoise {
 			permutationTable[tableSize + i] = permutationTable[i];
 		}
 	}
+
 	virtual ~PerlinNoise() {}
+
 	float eval(const glm::vec3 &p, glm::vec3 &derivs) const {
 		int xi0 = ((int)std::floor(p.x)) & tableSizeMask;
 		int yi0 = ((int)std::floor(p.y)) & tableSizeMask;

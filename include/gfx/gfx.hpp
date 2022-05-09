@@ -311,6 +311,7 @@ namespace gfx {
 		}
 
 		glBindVertexArray(buff.vertex_array_object_id);
+		glBindBuffer(GL_ARRAY_BUFFER, buff.vertex_buffer_object_ids[buffer<BuffType>::vertex]);
 		for (auto &attr : layout.attributes) {
 			for (GLint i = 0; i < attr.count; ++i) {
 				glEnableVertexAttribArray(attr.location + i);

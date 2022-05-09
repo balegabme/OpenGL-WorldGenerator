@@ -19,7 +19,6 @@ struct app {
 	BIOME_TYPE biomeType = NORMAL;
 
 	bool firstmouse = true;
-	bool randomBiomeFlag = false;
 	bool imguiWindowHovered = false;
 	bool brushFlag = false;
 
@@ -30,20 +29,24 @@ struct app {
 	float deltatime;
 
 	gfx::shader basic_shader;
+	gfx::shader skybox_shader;
+
 	gfx::uniform<glm::mat4> pvm;
 	gfx::uniform<glm::mat4> nm;
 	gfx::uniform<glm::vec3> eyePos;
 
 	gfx::buffer<Vertex> terrain;
+	gfx::buffer<Vertex> skyBox;
 	std::vector<Vertex> vertices;
 	std::vector<unsigned int> indices;
 
 	float brushSize = 1.0f;
 
 	float scl = 100.0f;
+	const int chunkSize = 500;
+	int width = chunkSize;
+	int height = chunkSize;
 	int resolution = 200;
-	int width = 1000;
-	int height = 1000;
 	float perlinFreq = 0.01f;
 
 	~app() noexcept { gfx::destroy(terrain); }
@@ -128,27 +131,76 @@ struct app {
 		}
 		basic_shader.link("fragColor");
 
+		skybox_shader = gfx::shader::create();
+		{
+			skybox_shader.attach(GL_VERTEX_SHADER, R"(
+			#version 330
+			
+			layout(location = 0) in vec4 pos;
+			layout(location = 1) in vec4 col;
+
+			out vec4 color;
+
+			void main() {
+				color = col;
+				gl_Position = pos;
+			}
+
+		)");
+		}
+
+		{
+			skybox_shader.attach(GL_FRAGMENT_SHADER, R"(
+			#version 330
+			
+			in vec4 color;
+
+			out vec4 fragColor;
+			
+			void main() {
+				fragColor = color;
+			}
+		)");
+		}
+		skybox_shader.link("fragColor");
+
 		pvm = gfx::uniform<glm::mat4>(basic_shader, "pvm");
 		nm = gfx::uniform<glm::mat4>(basic_shader, "nm");
 		eyePos = gfx::uniform<glm::vec3>(basic_shader, "eyePos");
 		//  pvm = camera.view();
 
-		gfx::layout<Vertex> basic_layout = {
-			{0, &Vertex::pos},
-			{1, &Vertex::color},
-			{2, &Vertex::normal},
-		};
-
 		camera = gfx::camera(glm::vec4(1.0f, 70.0f, 3.0f, 1.0f));
 		camera.lookat(glm::vec3(width / 2, 1.0f, height / 2));
 
-		generateTerrain(width, height);
-
-		gfx::set_layout(terrain, basic_layout);
+		generateTerrain();
+		generateSkybox();
 	}
 
-	void generateTerrain(int width, int height) {
+	void generateSkybox() {
+		std::vector<Vertex> skyboxVertices;
+		std::vector<unsigned int> skyboxIndices;
 
+		skyboxVertices.push_back({glm::vec4(1.0f, 1.0f, 0.9999f, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f)});
+		skyboxVertices.push_back({glm::vec4(-1.0f, 1.0f, 0.9999f, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f)});
+		skyboxVertices.push_back({glm::vec4(1.0f, -1.0f, 0.9999f, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f)});
+
+		skyboxVertices.push_back({glm::vec4(-1.0f, -1.0f, 0.9999f, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f)});
+		skyboxVertices.push_back({glm::vec4(1.0f, -1.0f, 0.9999f, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f)});
+		skyboxVertices.push_back({glm::vec4(-1.0f, 1.0f, 0.9999f, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f)});
+
+		skyboxIndices.push_back(std::size(skyboxIndices));
+		skyboxIndices.push_back(std::size(skyboxIndices));
+		skyboxIndices.push_back(std::size(skyboxIndices));
+
+		skyboxIndices.push_back(std::size(skyboxIndices));
+		skyboxIndices.push_back(std::size(skyboxIndices));
+		skyboxIndices.push_back(std::size(skyboxIndices));
+
+		gfx::upload(skyBox, gfx::vertex_buffer, skyboxVertices);
+		gfx::upload(skyBox, gfx::index_buffer, skyboxIndices);
+	}
+
+	void generateTerrain() {
 		vertices.clear();
 		indices.clear();
 
@@ -218,7 +270,7 @@ struct app {
 		}
 	}
 
-	void terraformingOnClick() {
+	void terraformingOnClick(short direction) {
 		glm::vec3 unprojectNear(0.0f, 0.0f, 0.0f);
 		glm::vec3 unprojectFar(0.0f, 0.0f, 0.0f);
 		camera.screenToWorldVertex(mouse.lastX, windowHeight - mouse.lastY, unprojectNear, unprojectFar, windowWidth, windowHeight);
@@ -249,9 +301,8 @@ struct app {
 			for (auto &vert : vertices) {
 				const float dist = glm::distance(*intersectionPoint, glm::vec3(vert.pos)) / ((width / (resolution - 1) + height / (resolution - 1)) / 2);
 				float scale = 1.0f / (1.0f + 1 / brushSize * pow(dist, 2));
-				if (scale > 0.1) vert.pos.y += scale;
+				if (scale > 0.1) vert.pos.y += scale * direction;
 			}
-
 			gfx::upload(terrain, gfx::vertex_buffer, vertices);
 		}
 	}
@@ -312,7 +363,7 @@ struct app {
 	}
 
 	void mousewheel(double xoffset, double yoffset) {
-		constexpr auto speed = 70;
+		constexpr auto speed = 170;
 		camera.position += camera.worldup * deltatime * yoffset * speed;
 	}
 
@@ -385,7 +436,7 @@ struct app {
 		}
 
 		// if (ImGui::SliderInt("Resolution", &resolution, 1.0f, 200.0f)) generateTerrain(width, height); TODO
-		if (ImGui::SliderFloat("Noise Frequency", &perlinFreq, 0.001f, 0.1f)) generateTerrain(width, height);
+		if (ImGui::SliderFloat("Noise Frequency", &perlinFreq, 0.001f, 0.1f)) generateTerrain();
 		ImGui::Checkbox(" ", &brushFlag);
 		ImGui::SameLine(0, 0);
 		ImGui::SliderFloat("Brush Size", &brushSize, 1.0f, 10.0f);
@@ -415,11 +466,28 @@ struct app {
 	}
 
 	void render_terrain() {
+		gfx::layout<Vertex> basic_layout = {
+			{0, &Vertex::pos},
+			{1, &Vertex::color},
+			{2, &Vertex::normal},
+		};
+
 		gfx::use(basic_shader);
+		gfx::set_layout(terrain, basic_layout);
 		pvm = camera.projection() * camera.view();
 		nm = glm::mat4(1.0);
 		eyePos = camera.position;
 		gfx::draw(terrain);
+	}
+
+	void render_skybox() {
+		gfx::layout<Vertex> skybox_layout = {
+			{0, &Vertex::pos},
+			{1, &Vertex::color},
+		};
+		gfx::use(skybox_shader);
+		gfx::set_layout(skyBox, skybox_layout);
+		gfx::draw(skyBox);
 	}
 
 	void render() {
@@ -427,12 +495,13 @@ struct app {
 		glClearDepth(1.0f);
 		glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+		render_skybox();
 		render_terrain();
 		render_gui();
 	}
 
 	void cameramove(float dt) {
-		constexpr auto speed = 70;
+		constexpr auto speed = 170;
 		if (keyboard.keys[GLFW_KEY_W]) {
 			glm::vec3 m = glm::normalize(glm::vec3{camera.front.x, 0.0f, camera.front.z});
 
@@ -463,7 +532,10 @@ struct app {
 		deltatime = dt;
 		cameramove(dt);
 		if (mouse.buttons[GLFW_MOUSE_BUTTON_LEFT] && !imguiWindowHovered && brushFlag) {
-			terraformingOnClick();
+			terraformingOnClick(1);
+		}
+		if (mouse.buttons[GLFW_MOUSE_BUTTON_RIGHT] && !imguiWindowHovered && brushFlag) {
+			terraformingOnClick(-1);
 		}
 		render();
 	}
