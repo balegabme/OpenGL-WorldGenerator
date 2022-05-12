@@ -46,6 +46,7 @@ add_executable(${EXECUTABLE_NAME})
 target_compile_features(${EXECUTABLE_NAME} PUBLIC cxx_std_20)
 target_sources(${EXECUTABLE_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/main.cpp)
 target_sources(${EXECUTABLE_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/perlin.cpp)
+target_sources(${EXECUTABLE_NAME} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/src/stb.cpp)
 
 target_compile_definitions(${EXECUTABLE_NAME} PUBLIC -DGLFW_INCLUDE_NONE -DGLM_ENABLE_EXPERIMENTAL)
 

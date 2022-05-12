@@ -1,14 +1,21 @@
 
+#include "stb/stb_image.h"
+#include <filesystem>
 #include <gfx/gfx.hpp>
 #include <glfw-helper/glfw.hpp>
 #include <perlin/perlin.hpp>
 
 struct app {
-
+	GLuint texture;
 	struct Vertex {
 		glm::vec4 pos;
 		glm::vec4 color;
 		glm::vec3 normal;
+	};
+	struct VertexImage {
+		glm::vec4 pos;
+		glm::vec4 color;
+		glm::vec2 tex;
 	};
 
 	int windowWidth = 1000;
@@ -30,6 +37,7 @@ struct app {
 
 	gfx::shader basic_shader;
 	gfx::shader skybox_shader;
+	gfx::shader image_shader;
 
 	gfx::uniform<glm::mat4> pvm;
 	gfx::uniform<glm::mat4> nm;
@@ -37,6 +45,8 @@ struct app {
 
 	gfx::buffer<Vertex> terrain;
 	gfx::buffer<Vertex> skyBox;
+	gfx::buffer<VertexImage> imageBuffer;
+
 	std::vector<Vertex> vertices;
 	std::vector<unsigned int> indices;
 
@@ -164,6 +174,51 @@ struct app {
 		}
 		skybox_shader.link("fragColor");
 
+		image_shader = gfx::shader::create();
+		{
+			image_shader.attach(GL_VERTEX_SHADER, R"(
+			#version 330
+			
+			layout(location = 0) in vec4 pos;
+			layout(location = 1) in vec4 col;
+			layout(location = 2) in vec2 aTex;
+
+
+			out vec4 color;
+			out vec2 texCoord;
+
+			uniform mat4 pvm;
+
+			void main() {
+				color = col;
+				vec4 position = pvm * pos;
+				gl_Position = position;
+				texCoord = aTex;
+			}
+
+		)");
+		}
+
+		{
+			image_shader.attach(GL_FRAGMENT_SHADER, R"(
+			#version 330
+
+			in vec4 color;
+			in vec2 texCoord;
+
+			out vec4 fragColor;
+
+			uniform sampler2D tex0;
+
+			void main() {
+				
+				fragColor = texture(tex0,texCoord);
+
+			}
+		)");
+		}
+		image_shader.link("fragColor");
+
 		pvm = gfx::uniform<glm::mat4>(basic_shader, "pvm");
 		nm = gfx::uniform<glm::mat4>(basic_shader, "nm");
 		eyePos = gfx::uniform<glm::vec3>(basic_shader, "eyePos");
@@ -174,6 +229,7 @@ struct app {
 
 		generateTerrain();
 		generateSkybox();
+		initImageBuffer();
 	}
 
 	void generateSkybox() {
@@ -306,6 +362,120 @@ struct app {
 			gfx::upload(terrain, gfx::vertex_buffer, vertices);
 		}
 	}
+	void initImageBuffer() {
+		std::vector<Vertex> imageVertices;
+		std::vector<unsigned int> imageIndices;
+		imageVertices.push_back({glm::vec4(-1.0f, -1.0f, 0.5f, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f)});
+
+		imageIndices.push_back(std::size(imageIndices));
+
+		gfx::upload(imageBuffer, gfx::vertex_buffer, imageVertices);
+		gfx::upload(imageBuffer, gfx::index_buffer, imageIndices);
+	}
+
+	void placeUFOimage() {
+
+		std::vector<VertexImage> imageVertices;
+		std::vector<unsigned int> imageIndices;
+
+		glm::vec3 unprojectNear(0.0f, 0.0f, 0.0f);
+		glm::vec3 unprojectFar(0.0f, 0.0f, 0.0f);
+		camera.screenToWorldVertex(mouse.lastX, windowHeight - mouse.lastY, unprojectNear, unprojectFar, windowWidth, windowHeight);
+
+		glm::vec3 origin = camera.position;
+		glm::vec3 vector = glm::normalize(unprojectNear - unprojectFar);
+		gfx::Triangle triangle;
+		std::optional<glm::vec3> intersectionPoint;
+		float intersectionPointDistance;
+		float lastIntersectionPointDistance = std::numeric_limits<float>::max();
+
+		for (unsigned int i = 0; i < std::size(indices); i += 3) {
+
+			triangle.vertex0 = vertices[i].pos;
+			triangle.vertex1 = vertices[i + 1].pos;
+			triangle.vertex2 = vertices[i + 2].pos;
+
+			if (gfx::rayIntersectsTriangle(origin, vector, triangle, intersectionPointDistance)) {
+				if (intersectionPointDistance < lastIntersectionPointDistance) {
+
+					lastIntersectionPointDistance = intersectionPointDistance;
+					intersectionPoint = vector * intersectionPointDistance + origin;
+				}
+			}
+		}
+
+		if (intersectionPoint) {
+
+			imageVertices.push_back({glm::vec4({*intersectionPoint, 1.0f}), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f), glm::vec2(0.0f, 0.0f)});																					// bottom left
+			imageVertices.push_back({glm::vec4(intersectionPoint.value().x + 10.0f, intersectionPoint.value().y, intersectionPoint.value().z, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f), glm::vec2(1.0f, 0.0f)});			// bottom right
+			imageVertices.push_back({glm::vec4(intersectionPoint.value().x, intersectionPoint.value().y + 10.0f, intersectionPoint.value().z, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f), glm::vec2(0.0f, 1.0f)});			// upper left
+			imageVertices.push_back({glm::vec4(intersectionPoint.value().x + 10.0f, intersectionPoint.value().y + 10.0f, intersectionPoint.value().z, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f), glm::vec2(1.0f, 1.0f)}); // upper right
+
+			imageIndices.push_back(0);
+			imageIndices.push_back(1);
+			imageIndices.push_back(2);
+			imageIndices.push_back(3);
+			imageIndices.push_back(2);
+			imageIndices.push_back(1);
+
+			std::cout << "kenyer";
+			gfx::upload(imageBuffer, gfx::vertex_buffer, imageVertices);
+			gfx::upload(imageBuffer, gfx::index_buffer, imageIndices);
+		}
+	}
+
+	void placeUFOimageasd() {
+		std::vector<Vertex> imageVertices;
+		std::vector<unsigned int> imageIndices;
+		glm::vec3 unprojectNear(0.0f, 0.0f, 0.0f);
+		glm::vec3 unprojectFar(0.0f, 0.0f, 0.0f);
+		camera.screenToWorldVertex(mouse.lastX, windowHeight - mouse.lastY, unprojectNear, unprojectFar, windowWidth, windowHeight);
+
+		glm::vec3 origin = camera.position;
+		glm::vec3 vector = glm::normalize(unprojectNear - unprojectFar);
+		gfx::Triangle triangle;
+		std::optional<glm::vec3> intersectionPoint;
+		float intersectionPointDistance;
+		float lastIntersectionPointDistance = std::numeric_limits<float>::max();
+
+		for (unsigned int i = 0; i < std::size(indices); i += 3) {
+
+			triangle.vertex0 = vertices[i].pos;
+			triangle.vertex1 = vertices[i + 1].pos;
+			triangle.vertex2 = vertices[i + 2].pos;
+
+			if (gfx::rayIntersectsTriangle(origin, vector, triangle, intersectionPointDistance)) {
+				if (intersectionPointDistance < lastIntersectionPointDistance) {
+
+					lastIntersectionPointDistance = intersectionPointDistance;
+					intersectionPoint = vector * intersectionPointDistance + origin;
+				}
+			}
+		}
+
+		if (intersectionPoint) {
+
+			imageVertices.push_back({glm::vec4({*intersectionPoint, 1.0f}), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f)});																			 // lower left
+			imageVertices.push_back({glm::vec4(intersectionPoint.value().x + 10.0f, intersectionPoint.value().y, intersectionPoint.value().z, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f)}); // lower right
+			imageVertices.push_back({glm::vec4(intersectionPoint.value().x, intersectionPoint.value().y + 10.0f, intersectionPoint.value().z, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f)}); // upper left
+																																															 // lower right
+
+			imageVertices.push_back({glm::vec4(intersectionPoint.value().x + 10.0f, intersectionPoint.value().y + 10.0f, intersectionPoint.value().z, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f)}); // upper right
+			imageVertices.push_back({glm::vec4(intersectionPoint.value().x, intersectionPoint.value().y + 10.0f, intersectionPoint.value().z, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f)});
+			imageVertices.push_back({glm::vec4(intersectionPoint.value().x + 10.0f, intersectionPoint.value().y, intersectionPoint.value().z, 1.0f), glm::vec4(0.52f, 0.82f, 0.99f, 1.0f)});
+
+			imageIndices.push_back(std::size(imageIndices));
+			imageIndices.push_back(std::size(imageIndices));
+			imageIndices.push_back(std::size(imageIndices));
+			imageIndices.push_back(std::size(imageIndices));
+			imageIndices.push_back(std::size(imageIndices));
+			imageIndices.push_back(std::size(imageIndices));
+
+			std::cout << "kenyer";
+			gfx::upload(imageBuffer, gfx::vertex_buffer, imageVertices);
+			gfx::upload(imageBuffer, gfx::index_buffer, imageIndices);
+		}
+	}
 
 	void rotateCamera(double xpos, double ypos) {
 		if (firstmouse) {
@@ -350,6 +520,9 @@ struct app {
 			mouse.buttons[button] = true;
 		} else if (action == GLFW_RELEASE) {
 			mouse.buttons[button] = false;
+		}
+		if (mouse.buttons[GLFW_MOUSE_BUTTON_MIDDLE] && !imguiWindowHovered) {
+			placeUFOimage();
 		}
 	}
 
@@ -490,6 +663,22 @@ struct app {
 		gfx::draw(skyBox);
 	}
 
+	void render_image() {
+		gfx::layout<VertexImage> image_layout = {
+			{0, &VertexImage::pos},
+			{1, &VertexImage::color},
+			{2, &VertexImage::tex},
+		};
+		gfx::use(image_shader);
+		gfx::set_layout(imageBuffer, image_layout);
+		pvm = camera.projection() * camera.view();
+		glActiveTexture(GL_TEXTURE0);
+
+		glBindTexture(GL_TEXTURE_2D, texture);
+		glUniform1i(glGetUniformLocation(image_shader.ID, "tex0"), 0);
+		gfx::draw(imageBuffer);
+	}
+
 	void render() {
 		glClearColor(0, 0, 0, 1);
 		glClearDepth(1.0f);
@@ -497,6 +686,7 @@ struct app {
 
 		render_skybox();
 		render_terrain();
+		render_image();
 		render_gui();
 	}
 
@@ -539,6 +729,33 @@ struct app {
 		}
 		render();
 	}
+
+	void createTexture() {
+		int widthImg, heightImg, numColCh;
+		stbi_set_flip_vertically_on_load(true);
+		unsigned char *bytes = stbi_load((std::filesystem::current_path() / "kicsi_ufo.jpg").string().c_str(), &widthImg, &heightImg, &numColCh, 0);
+		std::cout << (std::filesystem::current_path() / "kicsi_ufo.jpg").string().c_str();
+		if (!bytes) {
+			fprintf(stderr, "Cannot load file image\nSTB Reason: %s\n", stbi_failure_reason());
+			exit(0);
+		}
+
+		glGenTextures(1, &texture);
+		glActiveTexture(GL_TEXTURE0);
+		glBindTexture(GL_TEXTURE_2D, texture);
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+		glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+
+		glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, widthImg, heightImg, 0, GL_RGB, GL_UNSIGNED_BYTE, bytes);
+		glGenerateMipmap(GL_TEXTURE_2D);
+
+		// stbi_image_free(bytes);
+		glBindTexture(GL_TEXTURE_2D, 0);
+	}
 };
 
 int main() {
@@ -563,6 +780,7 @@ int main() {
 	glfw::on(wnd, glfw::scroll, [&](glfw::window &window, double xoffset, double yoffset) { app.mousewheel(xoffset, yoffset); });
 
 	app.init();
+	app.createTexture();
 
 	glfw::run([&](float dt) {
 		app.update(dt);

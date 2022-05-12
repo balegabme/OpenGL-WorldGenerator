@@ -17,9 +17,8 @@ namespace gfx {
 
 	struct shader {
 	  private:
-		GLuint ID;
-
 	  public:
+		GLuint ID;
 		shader(GLuint ID = 0) noexcept : ID{ID} {}
 
 		static shader create() { return shader(glCreateProgram()); }
